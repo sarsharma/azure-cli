@@ -5038,6 +5038,23 @@ def _build_onedeploy_scm_url(params):
     return deploy_url
 
 
+def _build_deploymentstatus_arm_url(params):
+    from azure.cli.core.commands.client_factory import get_subscription_id
+    client = web_client_factory(params.cmd.cli_ctx)
+    sub_id = get_subscription_id(params.cmd.cli_ctx)
+    if not params.slot:
+        base_url = (
+            f"subscriptions/{sub_id}/resourceGroups/{params.resource_group_name}/providers/Microsoft.Web/sites/"
+            f"{params.webapp_name}/deploymentStatus/{params.deployment_id}?api-version={client.DEFAULT_API_VERSION}"
+        )
+    else:
+        base_url = (
+            f"subscriptions/{sub_id}/resourceGroups/{params.resource_group_name}/providers/Microsoft.Web/sites/"
+            f"{params.webapp_name}/slots/{params.slot}/deploymentStatus/{params.deployment_id}"
+            f"?api-version={client.DEFAULT_API_VERSION}"
+        )
+    return params.cmd.cli_ctx.cloud.endpoints.resource_manager + base_url
+
 def _build_onedeploy_arm_url(params):
     from azure.cli.core.commands.client_factory import get_subscription_id
     client = web_client_factory(params.cmd.cli_ctx)
@@ -5159,6 +5176,13 @@ def _make_onedeploy_request(params):
                 if state:
                     logger.warning("Deployment status is: \"%s\"", state)
                 response_body = response.json().get("properties", {})
+        # use deployment status api to print deployment status
+        params.deployment_id = response_body.get("id")
+        deployment_status_url = _build_deploymentstatus_arm_url(params)
+        while True:
+            status_response = send_raw_request(params.cmd.cli_ctx, "GET", deployment_status_url, log_request_response=False)
+            logger.info("Deployment Status at %s : %s", datetime.datetime.now(), status_response.json())
+            time.sleep(1)
         return response_body
 
     # API not available yet!
